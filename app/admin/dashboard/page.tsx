@@ -12,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { auth } from "@/lib/firebase"
 import { useRouter } from "next/navigation"
-import { LogOut, Plus, Trash2, Users, Download, Edit } from "lucide-react"
+import { LogOut, Plus, Trash2, Users, Download, Edit, Search } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { Footer } from "@/components/footer"
 import { addPenduduk, getAllPenduduk, deletePenduduk, updatePenduduk, calculateAge } from "@/lib/firebase-service"
@@ -27,6 +27,7 @@ export default function AdminDashboardPage() {
   const [showForm, setShowForm] = useState(false)
   const [editMode, setEditMode] = useState(false)
   const [editId, setEditId] = useState<string | null>(null)
+  const [searchQuery, setSearchQuery] = useState("")
 
   const [formData, setFormData] = useState({
     noKK: "",
@@ -202,6 +203,17 @@ export default function AdminDashboardPage() {
     })
   }
 
+  const filteredPendudukList = pendudukList.filter((penduduk) => {
+    const query = searchQuery.toLowerCase()
+    return (
+      penduduk.nama.toLowerCase().includes(query) ||
+      penduduk.nik.toLowerCase().includes(query) ||
+      penduduk.noKK.toLowerCase().includes(query) ||
+      penduduk.pekerjaan.toLowerCase().includes(query) ||
+      `rt ${penduduk.rt}`.toLowerCase().includes(query)
+    )
+  })
+
   return (
     <div className="min-h-screen bg-background flex flex-col">
       <motion.header
@@ -259,6 +271,24 @@ export default function AdminDashboardPage() {
               ))}
             </div>
           </div>
+        </Card>
+
+        <Card className="p-4">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <Input
+              type="text"
+              placeholder="Cari berdasarkan nama, NIK, No. KK, pekerjaan, atau RT..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-10"
+            />
+          </div>
+          {searchQuery && (
+            <p className="text-sm text-muted-foreground mt-2">
+              Ditemukan {filteredPendudukList.length} dari {pendudukList.length} data
+            </p>
+          )}
         </Card>
 
         {showForm && (
@@ -419,62 +449,112 @@ export default function AdminDashboardPage() {
         )}
 
         <Card className="p-4 sm:p-6">
-          <div className="overflow-x-auto -mx-4 sm:mx-0">
-            <div className="inline-block min-w-full align-middle">
-              <div className="overflow-hidden">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead className="whitespace-nowrap">No. KK</TableHead>
-                      <TableHead className="whitespace-nowrap">NIK</TableHead>
-                      <TableHead className="whitespace-nowrap">Nama</TableHead>
-                      <TableHead className="whitespace-nowrap">Jenis Kelamin</TableHead>
-                      <TableHead className="whitespace-nowrap">Umur</TableHead>
-                      <TableHead className="whitespace-nowrap">Pendidikan</TableHead>
-                      <TableHead className="whitespace-nowrap">Pekerjaan</TableHead>
-                      <TableHead className="whitespace-nowrap">RT</TableHead>
-                      <TableHead className="whitespace-nowrap">Aksi</TableHead>
+          <div className="hidden md:block overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="whitespace-nowrap">No. KK</TableHead>
+                  <TableHead className="whitespace-nowrap">NIK</TableHead>
+                  <TableHead className="whitespace-nowrap">Nama</TableHead>
+                  <TableHead className="whitespace-nowrap">Jenis Kelamin</TableHead>
+                  <TableHead className="whitespace-nowrap">Umur</TableHead>
+                  <TableHead className="whitespace-nowrap">Pendidikan</TableHead>
+                  <TableHead className="whitespace-nowrap">Pekerjaan</TableHead>
+                  <TableHead className="whitespace-nowrap">RT</TableHead>
+                  <TableHead className="whitespace-nowrap">Aksi</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filteredPendudukList.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={9} className="text-center text-muted-foreground py-8">
+                      {searchQuery ? "Tidak ada data yang sesuai dengan pencarian" : "Belum ada data penduduk"}
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  filteredPendudukList.map((penduduk) => (
+                    <TableRow key={penduduk.id}>
+                      <TableCell className="whitespace-nowrap">{penduduk.noKK}</TableCell>
+                      <TableCell className="whitespace-nowrap">{penduduk.nik}</TableCell>
+                      <TableCell className="whitespace-nowrap">{penduduk.nama}</TableCell>
+                      <TableCell className="whitespace-nowrap">{penduduk.jenisKelamin}</TableCell>
+                      <TableCell className="whitespace-nowrap">{penduduk.umur} tahun</TableCell>
+                      <TableCell className="whitespace-nowrap">{penduduk.pendidikan}</TableCell>
+                      <TableCell className="whitespace-nowrap">{penduduk.pekerjaan}</TableCell>
+                      <TableCell className="whitespace-nowrap">RT {penduduk.rt}</TableCell>
+                      <TableCell>
+                        <div className="flex gap-2">
+                          <Button variant="outline" size="sm" onClick={() => handleEdit(penduduk)}>
+                            <Edit className="w-4 h-4" />
+                          </Button>
+                          <Button
+                            variant="destructive"
+                            size="sm"
+                            onClick={() => handleDelete(penduduk.id!, penduduk.nama)}
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        </div>
+                      </TableCell>
                     </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {pendudukList.length === 0 ? (
-                      <TableRow>
-                        <TableCell colSpan={9} className="text-center text-muted-foreground py-8">
-                          Belum ada data penduduk
-                        </TableCell>
-                      </TableRow>
-                    ) : (
-                      pendudukList.map((penduduk) => (
-                        <TableRow key={penduduk.id}>
-                          <TableCell className="whitespace-nowrap">{penduduk.noKK}</TableCell>
-                          <TableCell className="whitespace-nowrap">{penduduk.nik}</TableCell>
-                          <TableCell className="whitespace-nowrap">{penduduk.nama}</TableCell>
-                          <TableCell className="whitespace-nowrap">{penduduk.jenisKelamin}</TableCell>
-                          <TableCell className="whitespace-nowrap">{penduduk.umur} tahun</TableCell>
-                          <TableCell className="whitespace-nowrap">{penduduk.pendidikan}</TableCell>
-                          <TableCell className="whitespace-nowrap">{penduduk.pekerjaan}</TableCell>
-                          <TableCell className="whitespace-nowrap">RT {penduduk.rt}</TableCell>
-                          <TableCell>
-                            <div className="flex gap-2">
-                              <Button variant="outline" size="sm" onClick={() => handleEdit(penduduk)}>
-                                <Edit className="w-4 h-4" />
-                              </Button>
-                              <Button
-                                variant="destructive"
-                                size="sm"
-                                onClick={() => handleDelete(penduduk.id!, penduduk.nama)}
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </Button>
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      ))
-                    )}
-                  </TableBody>
-                </Table>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </div>
+
+          <div className="md:hidden space-y-4">
+            {filteredPendudukList.length === 0 ? (
+              <div className="text-center text-muted-foreground py-8">
+                {searchQuery ? "Tidak ada data yang sesuai dengan pencarian" : "Belum ada data penduduk"}
               </div>
-            </div>
+            ) : (
+              filteredPendudukList.map((penduduk) => (
+                <div key={penduduk.id} className="bg-card border rounded-lg p-4 space-y-3">
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <h3 className="font-semibold text-lg">{penduduk.nama}</h3>
+                      <p className="text-sm text-muted-foreground">RT {penduduk.rt}</p>
+                    </div>
+                    <div className="flex gap-2">
+                      <Button variant="outline" size="sm" onClick={() => handleEdit(penduduk)}>
+                        <Edit className="w-4 h-4" />
+                      </Button>
+                      <Button variant="destructive" size="sm" onClick={() => handleDelete(penduduk.id!, penduduk.nama)}>
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3 text-sm">
+                    <div>
+                      <p className="text-muted-foreground">No. KK</p>
+                      <p className="font-medium">{penduduk.noKK}</p>
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground">NIK</p>
+                      <p className="font-medium">{penduduk.nik}</p>
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground">Jenis Kelamin</p>
+                      <p className="font-medium">{penduduk.jenisKelamin}</p>
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground">Umur</p>
+                      <p className="font-medium">{penduduk.umur} tahun</p>
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground">Pendidikan</p>
+                      <p className="font-medium">{penduduk.pendidikan}</p>
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground">Pekerjaan</p>
+                      <p className="font-medium">{penduduk.pekerjaan}</p>
+                    </div>
+                  </div>
+                </div>
+              ))
+            )}
           </div>
         </Card>
       </div>
