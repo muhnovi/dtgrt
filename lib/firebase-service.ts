@@ -1,6 +1,7 @@
+// Firebase service functions for CRUD operations
 import { collection, addDoc, getDocs, doc, updateDoc, deleteDoc, query, where, Timestamp } from "firebase/firestore"
 import { db } from "./firebase"
-import type { Penduduk, StatistikRT, DemografiJenisKelamin, DemografiUmur } from "./types"
+import type { Penduduk, StatistikRT, DemografiJenisKelamin, DemografiUmur, DemografiPekerjaan } from "./types"
 
 const COLLECTION_NAME = "penduduk"
 
@@ -147,4 +148,18 @@ export function calculateAge(birthDate: string): number {
   }
 
   return age
+}
+
+// Get occupation demographics
+export function getDemografiPekerjaan(pendudukList: Penduduk[]): DemografiPekerjaan[] {
+  const occupationCount = new Map<string, number>()
+
+  pendudukList.forEach((p) => {
+    const pekerjaan = p.pekerjaan || "Tidak Bekerja"
+    occupationCount.set(pekerjaan, (occupationCount.get(pekerjaan) || 0) + 1)
+  })
+
+  return Array.from(occupationCount.entries())
+    .map(([pekerjaan, jumlah]) => ({ pekerjaan, jumlah }))
+    .sort((a, b) => b.jumlah - a.jumlah)
 }

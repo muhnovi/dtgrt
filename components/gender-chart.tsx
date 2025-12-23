@@ -17,9 +17,9 @@ export function GenderChart({ lakiLaki, perempuan }: GenderChartProps) {
 
   return (
     <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.6 }}>
-      <Card className="p-6">
-        <h3 className="text-lg font-semibold mb-4 text-foreground">Demografi Jenis Kelamin</h3>
-        <ResponsiveContainer width="100%" height={300}>
+      <Card className="p-4 sm:p-6">
+        <h3 className="text-base sm:text-lg font-semibold mb-3 sm:mb-4 text-foreground">Demografi Jenis Kelamin</h3>
+        <ResponsiveContainer width="100%" height={250} className="sm:h-[300px]">
           <PieChart>
             <Pie
               data={data}
@@ -36,7 +36,7 @@ export function GenderChart({ lakiLaki, perempuan }: GenderChartProps) {
               ))}
             </Pie>
             <Tooltip />
-            <Legend />
+            <Legend wrapperStyle={{ fontSize: "14px" }} />
           </PieChart>
         </ResponsiveContainer>
       </Card>

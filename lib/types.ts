@@ -1,3 +1,4 @@
+// Type definitions for the village demographic system
 export type JenisKelamin = "Laki-laki" | "Perempuan"
 
 export type Pendidikan = "Tidak Sekolah" | "SD" | "SMP" | "SMA/SMK" | "D3" | "S1" | "S2" | "S3"
@@ -32,5 +33,10 @@ export interface DemografiJenisKelamin {
 
 export interface DemografiUmur {
   kategori: string
+  jumlah: number
+}
+
+export interface DemografiPekerjaan {
+  pekerjaan: string
   jumlah: number
 }

@@ -9,9 +9,10 @@ const _geist = Geist({ subsets: ["latin"] })
 const _geistMono = Geist_Mono({ subsets: ["latin"] })
 
 export const metadata: Metadata = {
-  title: "v0 App",
-  description: "Created with v0",
+  title: "Profil Penduduk Desa RW 7",
+  description: "Sistem Informasi Kependudukan Desa - RW 7",
   generator: "v0.app",
+  viewport: "width=device-width, initial-scale=1, maximum-scale=5",
   icons: {
     icon: [
       {
@@ -37,7 +38,7 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="en">
+    <html lang="id" className="scroll-smooth">
       <body className={`font-sans antialiased`}>
         {children}
         <Toaster />

@@ -15,12 +15,12 @@ interface StatCardProps {
 export function StatCard({ title, value, icon, delay = 0 }: StatCardProps) {
   return (
     <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, delay }}>
-      <Card className="p-6 hover:shadow-lg transition-shadow">
+      <Card className="p-4 sm:p-6 hover:shadow-lg transition-shadow">
         <div className="flex items-start justify-between">
-          <div className="space-y-2">
-            <p className="text-sm font-medium text-muted-foreground">{title}</p>
+          <div className="space-y-1 sm:space-y-2">
+            <p className="text-xs sm:text-sm font-medium text-muted-foreground">{title}</p>
             <motion.p
-              className="text-3xl font-bold text-foreground"
+              className="text-2xl sm:text-3xl font-bold text-foreground"
               initial={{ scale: 0.5 }}
               animate={{ scale: 1 }}
               transition={{ duration: 0.3, delay: delay + 0.2 }}
