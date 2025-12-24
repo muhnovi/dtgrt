@@ -16,7 +16,7 @@ import { LogOut, Plus, Trash2, Users, Download, Edit, Search } from "lucide-reac
 import { useToast } from "@/hooks/use-toast"
 import { Footer } from "@/components/footer"
 import { addPenduduk, getAllPenduduk, deletePenduduk, updatePenduduk, calculateAge } from "@/lib/firebase-service"
-import { exportToExcel } from "@/lib/excel-export"
+import { exportAllRTWithStats, exportSingleRT } from "@/lib/excel-export"
 import type { Penduduk, JenisKelamin, Pendidikan, RT } from "@/lib/types"
 
 export default function AdminDashboardPage() {
@@ -28,6 +28,7 @@ export default function AdminDashboardPage() {
   const [editMode, setEditMode] = useState(false)
   const [editId, setEditId] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState("")
+  const [rtFilter, setRtFilter] = useState<string | null>(null)
 
   const [formData, setFormData] = useState({
     noKK: "",
@@ -187,16 +188,16 @@ export default function AdminDashboardPage() {
   }
 
   const handleExportAll = () => {
-    exportToExcel(pendudukList, `Data_Penduduk_RW7_Semua_RT_${new Date().toISOString().split("T")[0]}`)
+    exportAllRTWithStats(pendudukList, `Data_Penduduk_RW7_Semua_RT_${new Date().toISOString().split("T")[0]}`)
     toast({
       title: "Download berhasil",
-      description: "Data semua RT berhasil didownload",
+      description: "Data semua RT dengan statistik berhasil didownload",
     })
   }
 
   const handleExportByRT = (rt: string) => {
     const filteredData = pendudukList.filter((p) => p.rt === rt)
-    exportToExcel(filteredData, `Data_Penduduk_RT${rt}_${new Date().toISOString().split("T")[0]}`)
+    exportSingleRT(filteredData, `Data_Penduduk_RT${rt}_${new Date().toISOString().split("T")[0]}`)
     toast({
       title: "Download berhasil",
       description: `Data RT ${rt} berhasil didownload`,
@@ -205,13 +206,16 @@ export default function AdminDashboardPage() {
 
   const filteredPendudukList = pendudukList.filter((penduduk) => {
     const query = searchQuery.toLowerCase()
-    return (
+    const matchesSearch =
       penduduk.nama.toLowerCase().includes(query) ||
       penduduk.nik.toLowerCase().includes(query) ||
       penduduk.noKK.toLowerCase().includes(query) ||
       penduduk.pekerjaan.toLowerCase().includes(query) ||
-      `rt ${penduduk.rt}`.toLowerCase().includes(query)
-    )
+      `rt ${penduduk.rt}`.includes(query)
+
+    const matchesRT = rtFilter ? penduduk.rt === rtFilter : true
+
+    return matchesSearch && matchesRT
   })
 
   return (
@@ -254,21 +258,49 @@ export default function AdminDashboardPage() {
         </div>
 
         <Card className="p-4">
-          <div className="flex flex-col sm:flex-row flex-wrap gap-2 items-start sm:items-center">
-            <span className="text-sm font-medium text-muted-foreground">Download per RT:</span>
-            <div className="flex flex-wrap gap-2 w-full sm:w-auto">
-              {["1", "2", "3", "4"].map((rt) => (
+          <div className="flex flex-col gap-3">
+            <div className="flex flex-col sm:flex-row flex-wrap gap-2 items-start sm:items-center">
+              <span className="text-sm font-medium text-muted-foreground">Filter RT:</span>
+              <div className="flex flex-wrap gap-2 w-full sm:w-auto">
                 <Button
-                  key={rt}
-                  variant="secondary"
+                  variant={rtFilter === null ? "default" : "outline"}
                   size="sm"
-                  onClick={() => handleExportByRT(rt)}
-                  className="gap-2 flex-1 sm:flex-initial"
+                  onClick={() => setRtFilter(null)}
+                  className="flex-1 sm:flex-initial"
                 >
-                  <Download className="w-3 h-3" />
-                  RT {rt}
+                  Semua RT
                 </Button>
-              ))}
+                {["1", "2", "3", "4"].map((rt) => (
+                  <Button
+                    key={rt}
+                    variant={rtFilter === rt ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setRtFilter(rt)}
+                    className="flex-1 sm:flex-initial"
+                  >
+                    RT {rt}
+                  </Button>
+                ))}
+              </div>
+            </div>
+            <div className="border-t pt-3">
+              <div className="flex flex-col sm:flex-row flex-wrap gap-2 items-start sm:items-center">
+                <span className="text-sm font-medium text-muted-foreground">Download per RT:</span>
+                <div className="flex flex-wrap gap-2 w-full sm:w-auto">
+                  {["1", "2", "3", "4"].map((rt) => (
+                    <Button
+                      key={rt}
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => handleExportByRT(rt)}
+                      className="gap-2 flex-1 sm:flex-initial"
+                    >
+                      <Download className="w-3 h-3" />
+                      RT {rt}
+                    </Button>
+                  ))}
+                </div>
+              </div>
             </div>
           </div>
         </Card>
@@ -284,9 +316,10 @@ export default function AdminDashboardPage() {
               className="pl-10"
             />
           </div>
-          {searchQuery && (
+          {(searchQuery || rtFilter) && (
             <p className="text-sm text-muted-foreground mt-2">
               Ditemukan {filteredPendudukList.length} dari {pendudukList.length} data
+              {rtFilter && ` di RT ${rtFilter}`}
             </p>
           )}
         </Card>

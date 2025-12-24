@@ -55,8 +55,8 @@ export default function HomePage() {
       >
         <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <div>
-            <h1 className="text-xl sm:text-2xl md:text-3xl font-bold">Profil Penduduk Desa</h1>
-            <p className="text-primary-foreground/80 mt-1 text-sm sm:text-base">RW 7 - Sistem Informasi Kependudukan</p>
+            <h1 className="text-xl sm:text-2xl md:text-3xl font-bold">Data Penduduk Dukuh Garotan</h1>
+            <p className="text-primary-foreground/80 mt-1 text-sm sm:text-base">RW 7 - Kalurahan Bendung, Kapanewon Semin, Kabupaten Gunungkidul</p>
           </div>
           <Button variant="secondary" onClick={() => router.push("/admin/login")} className="gap-2 w-full sm:w-auto">
             <LogIn className="w-4 h-4" />

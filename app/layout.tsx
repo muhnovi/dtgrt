@@ -1,18 +1,26 @@
 import type React from "react"
-import type { Metadata } from "next"
+import type { Metadata, Viewport } from "next"
 import { Geist, Geist_Mono } from "next/font/google"
 import { Analytics } from "@vercel/analytics/next"
 import { Toaster } from "@/components/ui/toaster"
 import "./globals.css"
 
-const _geist = Geist({ subsets: ["latin"] })
-const _geistMono = Geist_Mono({ subsets: ["latin"] })
+/* Font */
+const geist = Geist({
+  subsets: ["latin"],
+  display: "swap",
+})
 
+const geistMono = Geist_Mono({
+  subsets: ["latin"],
+  display: "swap",
+})
+
+/* ✅ Metadata (TANPA viewport) */
 export const metadata: Metadata = {
-  title: "Profil Penduduk Desa RW 7",
-  description: "Sistem Informasi Kependudukan Desa - RW 7",
+  title: "Data Penduduk Garotan",
+  description: "Sistem Informasi Kependudukan Dukuh Garotan - RW 7",
   generator: "v0.app",
-  viewport: "width=device-width, initial-scale=1, maximum-scale=5",
   icons: {
     icon: [
       {
@@ -32,6 +40,13 @@ export const metadata: Metadata = {
   },
 }
 
+/* ✅ Viewport HARUS export terpisah */
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 5,
+}
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -39,7 +54,9 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="id" className="scroll-smooth">
-      <body className={`font-sans antialiased`}>
+      <body
+        className={`${geist.className} ${geistMono.className} antialiased`}
+      >
         {children}
         <Toaster />
         <Analytics />
