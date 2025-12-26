@@ -1,6 +1,69 @@
 import type { Penduduk } from "./types"
+import ExcelJS from "exceljs"
 
-export function exportAllRTWithStats(data: Penduduk[], filename: string) {
+function getEducationCategory(pendidikan: string): string {
+  const normalized = (pendidikan || "").toUpperCase().trim()
+
+  if (normalized.includes("SMP")) return "SLTP"
+  if (normalized.includes("SMA") || normalized.includes("SMK")) return "SLTA"
+  if (normalized.includes("SD")) return "SD"
+  if (normalized.includes("S1") || normalized.includes("SARJANA")) return "S1"
+  if (normalized.includes("S2") || normalized.includes("MAGISTER")) return "S2"
+  if (normalized.includes("S3") || normalized.includes("DOKTOR")) return "S3"
+
+  return normalized
+}
+
+export async function exportAllRTWithStats(data: Penduduk[], filename: string) {
+  const workbook = new ExcelJS.Workbook()
+  const worksheet = workbook.addWorksheet("Data Penduduk")
+
+  // Set column widths
+  worksheet.columns = [
+    { header: "No. KK", key: "noKK", width: 18 },
+    { header: "NIK", key: "nik", width: 18 },
+    { header: "Nama", key: "nama", width: 20 },
+    { header: "Jenis Kelamin", key: "jenisKelamin", width: 15 },
+    { header: "Tanggal Lahir", key: "tanggalLahir", width: 15 },
+    { header: "Umur", key: "umur", width: 8 },
+    { header: "Pendidikan", key: "pendidikan", width: 15 },
+    { header: "Pekerjaan", key: "pekerjaan", width: 20 },
+    { header: "RT", key: "rt", width: 8 },
+  ]
+
+  // Add data rows with proper number formatting
+  data.forEach((p) => {
+    worksheet.addRow({
+      noKK: p.noKK,
+      nik: p.nik,
+      nama: p.nama,
+      jenisKelamin: p.jenisKelamin,
+      tanggalLahir: p.tanggalLahir,
+      umur: p.umur,
+      pendidikan: p.pendidikan,
+      pekerjaan: p.pekerjaan,
+      rt: `RT ${p.rt}`,
+    })
+  })
+
+  // Format header row
+  worksheet.getRow(1).font = { bold: true, color: { argb: "FFFFFFFF" } }
+  worksheet.getRow(1).fill = {
+    type: "pattern",
+    pattern: "solid",
+    fgColor: { argb: "FF2D7A3E" },
+  }
+
+  worksheet.getColumn("tanggalLahir").numFmt = "yyyy-mm-dd"
+
+  // Format number columns as text to prevent scientific notation
+  worksheet.getColumn("noKK").numFmt = "@"
+  worksheet.getColumn("nik").numFmt = "@"
+
+  // Add summary section
+  const lastRow = worksheet.lastRow?.number || 1
+  const summaryStartRow = lastRow + 3
+
   // Calculate statistics
   const rtStats = {
     "1": { laki: 0, perempuan: 0, kk: new Set<string>() },
@@ -12,7 +75,6 @@ export function exportAllRTWithStats(data: Penduduk[], filename: string) {
   const pendidikanCount: Record<string, number> = {}
 
   data.forEach((p) => {
-    // Count by RT and gender
     if (rtStats[p.rt as "1" | "2" | "3" | "4"]) {
       if (p.jenisKelamin === "Laki-laki") {
         rtStats[p.rt as "1" | "2" | "3" | "4"].laki++
@@ -22,94 +84,162 @@ export function exportAllRTWithStats(data: Penduduk[], filename: string) {
       rtStats[p.rt as "1" | "2" | "3" | "4"].kk.add(p.noKK)
     }
 
-    // Count education
-    const pendidikan = p.pendidikan || "Tidak Ada"
-    pendidikanCount[pendidikan] = (pendidikanCount[pendidikan] || 0) + 1
+    const educationCategory = getEducationCategory(p.pendidikan)
+    pendidikanCount[educationCategory] = (pendidikanCount[educationCategory] || 0) + 1
   })
 
-  // Calculate totals
   const totalLaki = Object.values(rtStats).reduce((sum, rt) => sum + rt.laki, 0)
   const totalPerempuan = Object.values(rtStats).reduce((sum, rt) => sum + rt.perempuan, 0)
   const totalPenduduk = totalLaki + totalPerempuan
   const totalKK = Object.values(rtStats).reduce((sum, rt) => sum + rt.kk.size, 0)
 
-  // Create CSV content
-  const lines: string[] = []
+  // Add summary title
+  worksheet.getCell(`A${summaryStartRow}`).value = "RINGKASAN DATA"
+  worksheet.getCell(`A${summaryStartRow}`).font = { bold: true, size: 12 }
 
-  lines.push('"===== DATA LENGKAP PENDUDUK ====="')
-  lines.push('""')
-
-  const headers = ["No. KK", "NIK", "Nama", "Jenis Kelamin", "Tanggal Lahir", "Umur", "Pendidikan", "Pekerjaan", "RT"]
-  lines.push(headers.map((h) => `"${h}"`).join(","))
-
-  // Data rows
-  data.forEach((p) => {
-    const row = [
-      `\t${p.noKK}`,
-      `\t${p.nik}`,
-      p.nama,
-      p.jenisKelamin,
-      p.tanggalLahir,
-      p.umur.toString(),
-      p.pendidikan,
-      p.pekerjaan,
-      `RT ${p.rt}`,
-    ]
-    lines.push(row.map((cell) => `"${cell}"`).join(","))
-  })
-
-  lines.push('""')
-  lines.push('""')
-  lines.push('"===== RINGKASAN DATA ====="')
-  lines.push('""')
-  lines.push('"GAROTAN"')
-  lines.push('""')
+  let currentRow = summaryStartRow + 2
+  worksheet.getCell(`A${currentRow}`).value = "GAROTAN"
+  worksheet.getCell(`A${currentRow}`).font = { bold: true }
 
   // Penduduk section
-  lines.push('"PENDUDUK"')
-  lines.push(`"RT01","L: ${rtStats["1"].laki}","P: ${rtStats["1"].perempuan}"`)
-  lines.push(`"RT02","L: ${rtStats["2"].laki}","P: ${rtStats["2"].perempuan}"`)
-  lines.push(`"RT03","L: ${rtStats["3"].laki}","P: ${rtStats["3"].perempuan}"`)
-  lines.push(`"RT04","L: ${rtStats["4"].laki}","P: ${rtStats["4"].perempuan}"`)
-  lines.push(`"JUMLAH","L: ${totalLaki}","P: ${totalPerempuan}"`)
-  lines.push(`"TOTAL",": ${totalPenduduk}",""`)
-  lines.push('""')
+  currentRow += 2
+  worksheet.getCell(`A${currentRow}`).value = "PENDUDUK"
+  worksheet.getCell(`A${currentRow}`).font = { bold: true }
+  currentRow++
+
+  worksheet.getCell(`A${currentRow}`).value = "RT01"
+  worksheet.getCell(`B${currentRow}`).value = `L: ${rtStats["1"].laki}`
+  worksheet.getCell(`C${currentRow}`).value = `P: ${rtStats["1"].perempuan}`
+  currentRow++
+
+  worksheet.getCell(`A${currentRow}`).value = "RT02"
+  worksheet.getCell(`B${currentRow}`).value = `L: ${rtStats["2"].laki}`
+  worksheet.getCell(`C${currentRow}`).value = `P: ${rtStats["2"].perempuan}`
+  currentRow++
+
+  worksheet.getCell(`A${currentRow}`).value = "RT03"
+  worksheet.getCell(`B${currentRow}`).value = `L: ${rtStats["3"].laki}`
+  worksheet.getCell(`C${currentRow}`).value = `P: ${rtStats["3"].perempuan}`
+  currentRow++
+
+  worksheet.getCell(`A${currentRow}`).value = "RT04"
+  worksheet.getCell(`B${currentRow}`).value = `L: ${rtStats["4"].laki}`
+  worksheet.getCell(`C${currentRow}`).value = `P: ${rtStats["4"].perempuan}`
+  currentRow++
+
+  worksheet.getCell(`A${currentRow}`).value = "JUMLAH"
+  worksheet.getCell(`B${currentRow}`).value = `L: ${totalLaki}`
+  worksheet.getCell(`C${currentRow}`).value = `P: ${totalPerempuan}`
+  currentRow++
+
+  worksheet.getCell(`A${currentRow}`).value = "TOTAL"
+  worksheet.getCell(`B${currentRow}`).value = totalPenduduk
+  worksheet.getCell(`A${currentRow}`).font = { bold: true }
 
   // Kepala Keluarga section
-  lines.push('"KEPALA KELUARGA"')
-  lines.push(`"RT01","Total: ${rtStats["1"].kk.size}",""`)
-  lines.push(`"RT02","Total: ${rtStats["2"].kk.size}",""`)
-  lines.push(`"RT03","Total: ${rtStats["3"].kk.size}",""`)
-  lines.push(`"RT04","Total: ${rtStats["4"].kk.size}",""`)
-  lines.push(`"TOTAL",": ${totalKK}",""`)
-  lines.push('""')
+  currentRow += 2
+  worksheet.getCell(`A${currentRow}`).value = "KEPALA KELUARGA"
+  worksheet.getCell(`A${currentRow}`).font = { bold: true }
+  currentRow++
+
+  worksheet.getCell(`A${currentRow}`).value = "RT01"
+  worksheet.getCell(`B${currentRow}`).value = `Total: ${rtStats["1"].kk.size}`
+  currentRow++
+
+  worksheet.getCell(`A${currentRow}`).value = "RT02"
+  worksheet.getCell(`B${currentRow}`).value = `Total: ${rtStats["2"].kk.size}`
+  currentRow++
+
+  worksheet.getCell(`A${currentRow}`).value = "RT03"
+  worksheet.getCell(`B${currentRow}`).value = `Total: ${rtStats["3"].kk.size}`
+  currentRow++
+
+  worksheet.getCell(`A${currentRow}`).value = "RT04"
+  worksheet.getCell(`B${currentRow}`).value = `Total: ${rtStats["4"].kk.size}`
+  currentRow++
+
+  worksheet.getCell(`A${currentRow}`).value = "TOTAL"
+  worksheet.getCell(`B${currentRow}`).value = totalKK
+  worksheet.getCell(`A${currentRow}`).font = { bold: true }
 
   // Education section
-  lines.push('"MENEMPUH PENDIDIKAN"')
+  currentRow += 2
+  worksheet.getCell(`A${currentRow}`).value = "MENEMPUH PENDIDIKAN"
+  worksheet.getCell(`A${currentRow}`).font = { bold: true }
+  currentRow++
+
   const educationOrder = ["SD", "SLTP", "SLTA", "S1", "S2", "S3"]
   educationOrder.forEach((edu) => {
     const count = pendidikanCount[edu] || 0
-    lines.push(`"${edu}",": ${count}",""`)
+    worksheet.getCell(`A${currentRow}`).value = edu
+    worksheet.getCell(`B${currentRow}`).value = count
+    currentRow++
   })
 
-  const csvContent = lines.join("\n")
-
-  // Create blob and download
-  const blob = new Blob(["\ufeff" + csvContent], { type: "text/csv;charset=utf-8;" })
-  const link = document.createElement("a")
+  // Save file
+  const buffer = await workbook.xlsx.writeBuffer()
+  const blob = new Blob([buffer], {
+    type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  })
   const url = URL.createObjectURL(blob)
-
-  link.setAttribute("href", url)
-  link.setAttribute("download", `${filename}.csv`)
-  link.style.visibility = "hidden"
+  const link = document.createElement("a")
+  link.href = url
+  link.download = `${filename}.xlsx`
   document.body.appendChild(link)
   link.click()
   document.body.removeChild(link)
+  URL.revokeObjectURL(url)
 }
 
-export function exportSingleRT(data: Penduduk[], filename: string) {
+export async function exportSingleRT(data: Penduduk[], filename: string) {
+  const workbook = new ExcelJS.Workbook()
+  const worksheet = workbook.addWorksheet("Data Penduduk")
+
   const rtNumber = data.length > 0 ? data[0].rt : "1"
 
+  // Set column widths
+  worksheet.columns = [
+    { header: "No. KK", key: "noKK", width: 18 },
+    { header: "NIK", key: "nik", width: 18 },
+    { header: "Nama", key: "nama", width: 20 },
+    { header: "Jenis Kelamin", key: "jenisKelamin", width: 15 },
+    { header: "Tanggal Lahir", key: "tanggalLahir", width: 15 },
+    { header: "Umur", key: "umur", width: 8 },
+    { header: "Pendidikan", key: "pendidikan", width: 15 },
+    { header: "Pekerjaan", key: "pekerjaan", width: 20 },
+    { header: "RT", key: "rt", width: 8 },
+  ]
+
+  // Add data rows
+  data.forEach((p) => {
+    worksheet.addRow({
+      noKK: p.noKK,
+      nik: p.nik,
+      nama: p.nama,
+      jenisKelamin: p.jenisKelamin,
+      tanggalLahir: p.tanggalLahir,
+      umur: p.umur,
+      pendidikan: p.pendidikan,
+      pekerjaan: p.pekerjaan,
+      rt: `RT ${p.rt}`,
+    })
+  })
+
+  // Format header row
+  worksheet.getRow(1).font = { bold: true, color: { argb: "FFFFFFFF" } }
+  worksheet.getRow(1).fill = {
+    type: "pattern",
+    pattern: "solid",
+    fgColor: { argb: "FF2D7A3E" },
+  }
+
+  worksheet.getColumn("tanggalLahir").numFmt = "yyyy-mm-dd"
+
+  // Format number columns as text
+  worksheet.getColumn("noKK").numFmt = "@"
+  worksheet.getColumn("nik").numFmt = "@"
+
+  // Calculate statistics
   let laki = 0
   let perempuan = 0
   const kkSet = new Set<string>()
@@ -123,76 +253,74 @@ export function exportSingleRT(data: Penduduk[], filename: string) {
     }
     kkSet.add(p.noKK)
 
-    const pendidikan = p.pendidikan || "Tidak Ada"
-    pendidikanCount[pendidikan] = (pendidikanCount[pendidikan] || 0) + 1
+    const educationCategory = getEducationCategory(p.pendidikan)
+    pendidikanCount[educationCategory] = (pendidikanCount[educationCategory] || 0) + 1
   })
 
   const totalPenduduk = laki + perempuan
   const totalKK = kkSet.size
 
-  // Create CSV content
-  const lines: string[] = []
+  // Add summary section
+  const lastRow = worksheet.lastRow?.number || 1
+  const summaryStartRow = lastRow + 3
 
-  // Data table header
-  lines.push(`"===== DATA PENDUDUK RT ${rtNumber} ====="`)
-  lines.push('""')
+  worksheet.getCell(`A${summaryStartRow}`).value = "RINGKASAN DATA"
+  worksheet.getCell(`A${summaryStartRow}`).font = { bold: true, size: 12 }
 
-  const headers = ["No. KK", "NIK", "Nama", "Jenis Kelamin", "Tanggal Lahir", "Umur", "Pendidikan", "Pekerjaan", "RT"]
-  lines.push(headers.map((h) => `"${h}"`).join(","))
-
-  // Data rows
-  data.forEach((p) => {
-    const row = [
-      `\t${p.noKK}`,
-      `\t${p.nik}`,
-      p.nama,
-      p.jenisKelamin,
-      p.tanggalLahir,
-      p.umur.toString(),
-      p.pendidikan,
-      p.pekerjaan,
-      `RT ${p.rt}`,
-    ]
-    lines.push(row.map((cell) => `"${cell}"`).join(","))
-  })
-
-  lines.push('""')
-  lines.push('""')
-  lines.push('"===== RINGKASAN DATA ====="')
-  lines.push('""')
-  lines.push(`"GAROTAN RT ${rtNumber}"`)
-  lines.push('""')
+  let currentRow = summaryStartRow + 2
+  worksheet.getCell(`A${currentRow}`).value = `GAROTAN RT ${rtNumber}`
+  worksheet.getCell(`A${currentRow}`).font = { bold: true }
 
   // Penduduk section
-  lines.push('"PENDUDUK"')
-  lines.push(`"RT0${rtNumber}","L: ${laki}","P: ${perempuan}"`)
-  lines.push(`"TOTAL",": ${totalPenduduk}",""`)
-  lines.push('""')
+  currentRow += 2
+  worksheet.getCell(`A${currentRow}`).value = "PENDUDUK"
+  worksheet.getCell(`A${currentRow}`).font = { bold: true }
+  currentRow++
+
+  worksheet.getCell(`A${currentRow}`).value = `RT0${rtNumber}`
+  worksheet.getCell(`B${currentRow}`).value = `L: ${laki}`
+  worksheet.getCell(`C${currentRow}`).value = `P: ${perempuan}`
+  currentRow++
+
+  worksheet.getCell(`A${currentRow}`).value = "TOTAL"
+  worksheet.getCell(`B${currentRow}`).value = totalPenduduk
+  worksheet.getCell(`A${currentRow}`).font = { bold: true }
 
   // Kepala Keluarga section
-  lines.push('"KEPALA KELUARGA"')
-  lines.push(`"RT0${rtNumber}","Total: ${totalKK}",""`)
-  lines.push('""')
+  currentRow += 2
+  worksheet.getCell(`A${currentRow}`).value = "KEPALA KELUARGA"
+  worksheet.getCell(`A${currentRow}`).font = { bold: true }
+  currentRow++
+
+  worksheet.getCell(`A${currentRow}`).value = `RT0${rtNumber}`
+  worksheet.getCell(`B${currentRow}`).value = `Total: ${totalKK}`
+  currentRow++
 
   // Education section
-  lines.push('"MENEMPUH PENDIDIKAN"')
+  currentRow += 2
+  worksheet.getCell(`A${currentRow}`).value = "MENEMPUH PENDIDIKAN"
+  worksheet.getCell(`A${currentRow}`).font = { bold: true }
+  currentRow++
+
   const educationOrder = ["SD", "SLTP", "SLTA", "S1", "S2", "S3"]
   educationOrder.forEach((edu) => {
     const count = pendidikanCount[edu] || 0
-    lines.push(`"${edu}",": ${count}",""`)
+    worksheet.getCell(`A${currentRow}`).value = edu
+    worksheet.getCell(`B${currentRow}`).value = count
+    currentRow++
   })
 
-  const csvContent = lines.join("\n")
-
-  // Create blob and download
-  const blob = new Blob(["\ufeff" + csvContent], { type: "text/csv;charset=utf-8;" })
-  const link = document.createElement("a")
+  // Save file
+  const buffer = await workbook.xlsx.writeBuffer()
+  const blob = new Blob([buffer], {
+    type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  })
   const url = URL.createObjectURL(blob)
-
-  link.setAttribute("href", url)
-  link.setAttribute("download", `${filename}.csv`)
-  link.style.visibility = "hidden"
+  const link = document.createElement("a")
+  link.href = url
+  link.download = `${filename}.xlsx`
   document.body.appendChild(link)
   link.click()
   document.body.removeChild(link)
+  URL.revokeObjectURL(url)
 }
