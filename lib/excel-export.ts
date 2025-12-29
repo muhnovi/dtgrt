@@ -4,14 +4,57 @@ import ExcelJS from "exceljs"
 function getEducationCategory(pendidikan: string): string {
   const normalized = (pendidikan || "").toUpperCase().trim()
 
-  if (normalized.includes("SMP")) return "SLTP"
-  if (normalized.includes("SMA") || normalized.includes("SMK")) return "SLTA"
-  if (normalized.includes("SD")) return "SD"
+  // Kategorisasi: TAMAT SD = SD, TAMAT SMP/SMP = SLTP, TAMAT SMA/SMK/SMA/SMK = SLTA, Diploma = DIPLOMA
+
+  // Handle "TAMAT" format
+  if (normalized.includes("TAMAT SMA") || normalized.includes("TAMAT SMK")) {
+    return "SLTA"
+  }
+  if (normalized.includes("TAMAT SMP")) {
+    return "SLTP"
+  }
+  if (normalized.includes("TAMAT SD")) {
+    return "SD"
+  }
+  if (normalized.includes("TAMAT S1")) {
+    return "S1"
+  }
+
+  // Handle regular format (SMA, SMK, SMP, SD, etc)
+  if (normalized.includes("SMA") || normalized.includes("SMK")) {
+    return "SLTA"
+  }
+  if (normalized.includes("SMP") || normalized.includes("SLTP")) {
+    return "SLTP"
+  }
+  if (normalized.includes("SD") && !normalized.includes("TAMAT")) {
+    return "SD"
+  }
+
+  // Handle diploma
+  if (
+    normalized.includes("DIPLOMA") ||
+    normalized.includes("D3") ||
+    normalized.includes("D4") ||
+    normalized.includes("D ")
+  ) {
+    return "DIPLOMA"
+  }
+
+  // Handle degree levels
   if (normalized.includes("S1") || normalized.includes("SARJANA")) return "S1"
   if (normalized.includes("S2") || normalized.includes("MAGISTER")) return "S2"
   if (normalized.includes("S3") || normalized.includes("DOKTOR")) return "S3"
 
+  // Return original if no match (for PAUD, TK, BELUM SEKOLAH, TIDAK SEKOLAH, etc)
   return normalized
+}
+
+function sanitizeNoKK(noKK: string | undefined | null): string {
+  if (!noKK || noKK.trim() === "") {
+    return "[NO. KK TIDAK TERDAFTAR]"
+  }
+  return String(noKK).trim()
 }
 
 export async function exportAllRTWithStats(data: Penduduk[], filename: string) {
@@ -34,7 +77,7 @@ export async function exportAllRTWithStats(data: Penduduk[], filename: string) {
   // Add data rows with proper number formatting
   data.forEach((p) => {
     worksheet.addRow({
-      noKK: p.noKK,
+      noKK: sanitizeNoKK(p.noKK),
       nik: p.nik,
       nama: p.nama,
       jenisKelamin: p.jenisKelamin,
@@ -54,7 +97,7 @@ export async function exportAllRTWithStats(data: Penduduk[], filename: string) {
     fgColor: { argb: "FF2D7A3E" },
   }
 
-  worksheet.getColumn("tanggalLahir").numFmt = "yyyy-mm-dd"
+  worksheet.getColumn("tanggalLahir").numFmt = "dd/mm/yyyy"
 
   // Format number columns as text to prevent scientific notation
   worksheet.getColumn("noKK").numFmt = "@"
@@ -75,13 +118,17 @@ export async function exportAllRTWithStats(data: Penduduk[], filename: string) {
   const pendidikanCount: Record<string, number> = {}
 
   data.forEach((p) => {
+    const noKKValue = sanitizeNoKK(p.noKK)
     if (rtStats[p.rt as "1" | "2" | "3" | "4"]) {
       if (p.jenisKelamin === "Laki-laki") {
         rtStats[p.rt as "1" | "2" | "3" | "4"].laki++
       } else {
         rtStats[p.rt as "1" | "2" | "3" | "4"].perempuan++
       }
-      rtStats[p.rt as "1" | "2" | "3" | "4"].kk.add(p.noKK)
+      // Only add to KK set if it's a real number, not the fallback text
+      if (!noKKValue.includes("TIDAK TERDAFTAR")) {
+        rtStats[p.rt as "1" | "2" | "3" | "4"].kk.add(noKKValue)
+      }
     }
 
     const educationCategory = getEducationCategory(p.pendidikan)
@@ -100,9 +147,9 @@ export async function exportAllRTWithStats(data: Penduduk[], filename: string) {
   let currentRow = summaryStartRow + 2
   worksheet.getCell(`A${currentRow}`).value = "GAROTAN"
   worksheet.getCell(`A${currentRow}`).font = { bold: true }
+  currentRow++
 
   // Penduduk section
-  currentRow += 2
   worksheet.getCell(`A${currentRow}`).value = "PENDUDUK"
   worksheet.getCell(`A${currentRow}`).font = { bold: true }
   currentRow++
@@ -135,9 +182,9 @@ export async function exportAllRTWithStats(data: Penduduk[], filename: string) {
   worksheet.getCell(`A${currentRow}`).value = "TOTAL"
   worksheet.getCell(`B${currentRow}`).value = totalPenduduk
   worksheet.getCell(`A${currentRow}`).font = { bold: true }
+  currentRow++
 
   // Kepala Keluarga section
-  currentRow += 2
   worksheet.getCell(`A${currentRow}`).value = "KEPALA KELUARGA"
   worksheet.getCell(`A${currentRow}`).font = { bold: true }
   currentRow++
@@ -161,14 +208,14 @@ export async function exportAllRTWithStats(data: Penduduk[], filename: string) {
   worksheet.getCell(`A${currentRow}`).value = "TOTAL"
   worksheet.getCell(`B${currentRow}`).value = totalKK
   worksheet.getCell(`A${currentRow}`).font = { bold: true }
+  currentRow++
 
   // Education section
-  currentRow += 2
   worksheet.getCell(`A${currentRow}`).value = "MENEMPUH PENDIDIKAN"
   worksheet.getCell(`A${currentRow}`).font = { bold: true }
   currentRow++
 
-  const educationOrder = ["SD", "SLTP", "SLTA", "S1", "S2", "S3"]
+  const educationOrder = ["SD", "SLTP", "SLTA", "DIPLOMA", "S1", "S2", "S3"]
   educationOrder.forEach((edu) => {
     const count = pendidikanCount[edu] || 0
     worksheet.getCell(`A${currentRow}`).value = edu
@@ -213,7 +260,7 @@ export async function exportSingleRT(data: Penduduk[], filename: string) {
   // Add data rows
   data.forEach((p) => {
     worksheet.addRow({
-      noKK: p.noKK,
+      noKK: sanitizeNoKK(p.noKK),
       nik: p.nik,
       nama: p.nama,
       jenisKelamin: p.jenisKelamin,
@@ -233,7 +280,7 @@ export async function exportSingleRT(data: Penduduk[], filename: string) {
     fgColor: { argb: "FF2D7A3E" },
   }
 
-  worksheet.getColumn("tanggalLahir").numFmt = "yyyy-mm-dd"
+  worksheet.getColumn("tanggalLahir").numFmt = "dd/mm/yyyy"
 
   // Format number columns as text
   worksheet.getColumn("noKK").numFmt = "@"
@@ -251,7 +298,11 @@ export async function exportSingleRT(data: Penduduk[], filename: string) {
     } else {
       perempuan++
     }
-    kkSet.add(p.noKK)
+    const noKKValue = sanitizeNoKK(p.noKK)
+    // Only add to KK set if it's a real number
+    if (!noKKValue.includes("TIDAK TERDAFTAR")) {
+      kkSet.add(noKKValue)
+    }
 
     const educationCategory = getEducationCategory(p.pendidikan)
     pendidikanCount[educationCategory] = (pendidikanCount[educationCategory] || 0) + 1
@@ -270,9 +321,9 @@ export async function exportSingleRT(data: Penduduk[], filename: string) {
   let currentRow = summaryStartRow + 2
   worksheet.getCell(`A${currentRow}`).value = `GAROTAN RT ${rtNumber}`
   worksheet.getCell(`A${currentRow}`).font = { bold: true }
+  currentRow++
 
   // Penduduk section
-  currentRow += 2
   worksheet.getCell(`A${currentRow}`).value = "PENDUDUK"
   worksheet.getCell(`A${currentRow}`).font = { bold: true }
   currentRow++
@@ -285,9 +336,9 @@ export async function exportSingleRT(data: Penduduk[], filename: string) {
   worksheet.getCell(`A${currentRow}`).value = "TOTAL"
   worksheet.getCell(`B${currentRow}`).value = totalPenduduk
   worksheet.getCell(`A${currentRow}`).font = { bold: true }
+  currentRow++
 
   // Kepala Keluarga section
-  currentRow += 2
   worksheet.getCell(`A${currentRow}`).value = "KEPALA KELUARGA"
   worksheet.getCell(`A${currentRow}`).font = { bold: true }
   currentRow++
@@ -297,12 +348,11 @@ export async function exportSingleRT(data: Penduduk[], filename: string) {
   currentRow++
 
   // Education section
-  currentRow += 2
   worksheet.getCell(`A${currentRow}`).value = "MENEMPUH PENDIDIKAN"
   worksheet.getCell(`A${currentRow}`).font = { bold: true }
   currentRow++
 
-  const educationOrder = ["SD", "SLTP", "SLTA", "S1", "S2", "S3"]
+  const educationOrder = ["SD", "SLTP", "SLTA", "DIPLOMA", "S1", "S2", "S3"]
   educationOrder.forEach((edu) => {
     const count = pendidikanCount[edu] || 0
     worksheet.getCell(`A${currentRow}`).value = edu
