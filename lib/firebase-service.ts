@@ -2,6 +2,7 @@
 import { collection, addDoc, getDocs, doc, updateDoc, deleteDoc, query, where, Timestamp } from "firebase/firestore"
 import { db } from "./firebase"
 import type { Penduduk, StatistikRT, DemografiJenisKelamin, DemografiUmur, DemografiPekerjaan } from "./types"
+import { getFirestore } from "firebase/firestore"
 
 const COLLECTION_NAME = "penduduk"
 
@@ -136,10 +137,55 @@ export function getDemografiUmur(pendudukList: Penduduk[]): DemografiUmur[] {
   }))
 }
 
+// Get occupation demographics
+export function getDemografiPekerjaan(pendudukList: Penduduk[]): DemografiPekerjaan[] {
+  const pekerjaanMap = new Map<string, number>()
+
+  pendudukList.forEach((p) => {
+    if (p.pekerjaan) {
+      const count = pekerjaanMap.get(p.pekerjaan) || 0
+      pekerjaanMap.set(p.pekerjaan, count + 1)
+    }
+  })
+
+  return Array.from(pekerjaanMap, ([pekerjaan, jumlah]) => ({
+    pekerjaan,
+    jumlah,
+  })).sort((a, b) => b.jumlah - a.jumlah)
+}
+
 // Calculate age from birth date
 export function calculateAge(birthDate: string): number {
+  if (!birthDate || typeof birthDate !== "string") {
+    return 0
+  }
+
+  // Try to parse the birth date with multiple format attempts
+  let birth = new Date(birthDate)
+
+  // If invalid, try to parse other common formats
+  if (isNaN(birth.getTime())) {
+    // Try DD/MM/YYYY format
+    const ddmmyyyy = birthDate.match(/^(\d{2})\/(\d{2})\/(\d{4})$/)
+    if (ddmmyyyy) {
+      birth = new Date(`${ddmmyyyy[3]}-${ddmmyyyy[2]}-${ddmmyyyy[1]}`)
+    }
+
+    // Try DD-MM-YYYY format
+    if (isNaN(birth.getTime())) {
+      const ddmmyyyy2 = birthDate.match(/^(\d{2})-(\d{2})-(\d{4})$/)
+      if (ddmmyyyy2) {
+        birth = new Date(`${ddmmyyyy2[3]}-${ddmmyyyy2[2]}-${ddmmyyyy2[1]}`)
+      }
+    }
+  }
+
+  // If still invalid, return 0
+  if (isNaN(birth.getTime())) {
+    return 0
+  }
+
   const today = new Date()
-  const birth = new Date(birthDate)
   let age = today.getFullYear() - birth.getFullYear()
   const monthDiff = today.getMonth() - birth.getMonth()
 
@@ -147,21 +193,54 @@ export function calculateAge(birthDate: string): number {
     age--
   }
 
-  return age
+  return age < 0 ? 0 : age
 }
 
-// Get occupation demographics
-export function getDemografiPekerjaan(pendudukList: Penduduk[]): DemografiPekerjaan[] {
-  const occupationCount = new Map<string, number>()
+export async function autoFixInvalidBirthDates(): Promise<number> {
+  try {
+    const db = getFirestore()
+    const pendudukRef = collection(db, "penduduk")
+    const snapshot = await getDocs(pendudukRef)
+    let fixedCount = 0
 
-  pendudukList.forEach((p) => {
-    const pekerjaan = p.pekerjaan || "Tidak Bekerja"
-    occupationCount.set(pekerjaan, (occupationCount.get(pekerjaan) || 0) + 1)
-  })
+    for (const doc of snapshot.docs) {
+      const penduduk = doc.data() as Penduduk
 
-  return Array.from(occupationCount.entries())
-    .map(([pekerjaan, jumlah]) => ({ pekerjaan, jumlah }))
-    .sort((a, b) => b.jumlah - a.jumlah)
+      // Check if birth date is invalid (calculateAge returns 0 but it's not supposed to)
+      if (penduduk.tanggalLahir && isNaN(new Date(penduduk.tanggalLahir).getTime())) {
+        // Try to parse with multiple formats
+        let newDate = ""
+
+        // Try DD/MM/YYYY format
+        const ddmmyyyy = penduduk.tanggalLahir.match(/^(\d{2})\/(\d{2})\/(\d{4})$/)
+        if (ddmmyyyy) {
+          newDate = `${ddmmyyyy[3]}-${ddmmyyyy[2]}-${ddmmyyyy[1]}`
+        }
+
+        // Try DD-MM-YYYY format
+        if (!newDate) {
+          const ddmmyyyy2 = penduduk.tanggalLahir.match(/^(\d{2})-(\d{2})-(\d{4})$/)
+          if (ddmmyyyy2) {
+            newDate = `${ddmmyyyy2[3]}-${ddmmyyyy2[2]}-${ddmmyyyy2[1]}`
+          }
+        }
+
+        if (newDate && !isNaN(new Date(newDate).getTime())) {
+          // Update the document with corrected date
+          await updateDoc(doc.ref, {
+            tanggalLahir: newDate,
+            umur: calculateAge(newDate),
+          })
+          fixedCount++
+        }
+      }
+    }
+
+    return fixedCount
+  } catch (error) {
+    console.error("Error fixing birth dates:", error)
+    return 0
+  }
 }
 
 // Refresh ages for all records based on birth dates
