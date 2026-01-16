@@ -57,6 +57,14 @@ function sanitizeNoKK(noKK: string | undefined | null): string {
   return String(noKK).trim()
 }
 
+function getAgeCategory(umur: number | undefined): string {
+  if (!umur) return "Tidak Diketahui"
+  if (umur < 5) return "Balita"
+  if (umur <= 17) return "Usia Sekolah"
+  if (umur <= 60) return "Produktif"
+  return "Lansia"
+}
+
 export async function exportAllRTWithStats(data: Penduduk[], filename: string) {
   const workbook = new ExcelJS.Workbook()
   const worksheet = workbook.addWorksheet("Data Penduduk")
@@ -107,7 +115,6 @@ export async function exportAllRTWithStats(data: Penduduk[], filename: string) {
   const lastRow = worksheet.lastRow?.number || 1
   const summaryStartRow = lastRow + 3
 
-  // Calculate statistics
   const rtStats = {
     "1": { laki: 0, perempuan: 0, kk: new Set<string>() },
     "2": { laki: 0, perempuan: 0, kk: new Set<string>() },
@@ -116,6 +123,13 @@ export async function exportAllRTWithStats(data: Penduduk[], filename: string) {
   }
 
   const pendidikanCount: Record<string, number> = {}
+  const ageCategories = {
+    Balita: 0,
+    "Usia Sekolah": 0,
+    Produktif: 0,
+    Lansia: 0,
+    "Tidak Diketahui": 0,
+  }
 
   data.forEach((p) => {
     const noKKValue = sanitizeNoKK(p.noKK)
@@ -133,6 +147,9 @@ export async function exportAllRTWithStats(data: Penduduk[], filename: string) {
 
     const educationCategory = getEducationCategory(p.pendidikan)
     pendidikanCount[educationCategory] = (pendidikanCount[educationCategory] || 0) + 1
+
+    const ageCategory = getAgeCategory(p.umur)
+    ageCategories[ageCategory as keyof typeof ageCategories]++
   })
 
   const totalLaki = Object.values(rtStats).reduce((sum, rt) => sum + rt.laki, 0)
@@ -208,6 +225,26 @@ export async function exportAllRTWithStats(data: Penduduk[], filename: string) {
   worksheet.getCell(`A${currentRow}`).value = "TOTAL"
   worksheet.getCell(`B${currentRow}`).value = totalKK
   worksheet.getCell(`A${currentRow}`).font = { bold: true }
+  currentRow++
+
+  worksheet.getCell(`A${currentRow}`).value = "KATEGORI USIA"
+  worksheet.getCell(`A${currentRow}`).font = { bold: true }
+  currentRow++
+
+  worksheet.getCell(`A${currentRow}`).value = "Balita (< 5 tahun)"
+  worksheet.getCell(`B${currentRow}`).value = ageCategories.Balita
+  currentRow++
+
+  worksheet.getCell(`A${currentRow}`).value = "Usia Sekolah (≤ 17 tahun)"
+  worksheet.getCell(`B${currentRow}`).value = ageCategories["Usia Sekolah"]
+  currentRow++
+
+  worksheet.getCell(`A${currentRow}`).value = "Produktif (≤ 60 tahun)"
+  worksheet.getCell(`B${currentRow}`).value = ageCategories.Produktif
+  currentRow++
+
+  worksheet.getCell(`A${currentRow}`).value = "Lansia (> 60 tahun)"
+  worksheet.getCell(`B${currentRow}`).value = ageCategories.Lansia
   currentRow++
 
   // Education section
@@ -286,11 +323,17 @@ export async function exportSingleRT(data: Penduduk[], filename: string) {
   worksheet.getColumn("noKK").numFmt = "@"
   worksheet.getColumn("nik").numFmt = "@"
 
-  // Calculate statistics
   let laki = 0
   let perempuan = 0
   const kkSet = new Set<string>()
   const pendidikanCount: Record<string, number> = {}
+  const ageCategories = {
+    Balita: 0,
+    "Usia Sekolah": 0,
+    Produktif: 0,
+    Lansia: 0,
+    "Tidak Diketahui": 0,
+  }
 
   data.forEach((p) => {
     if (p.jenisKelamin === "Laki-laki") {
@@ -306,6 +349,9 @@ export async function exportSingleRT(data: Penduduk[], filename: string) {
 
     const educationCategory = getEducationCategory(p.pendidikan)
     pendidikanCount[educationCategory] = (pendidikanCount[educationCategory] || 0) + 1
+
+    const ageCategory = getAgeCategory(p.umur)
+    ageCategories[ageCategory as keyof typeof ageCategories]++
   })
 
   const totalPenduduk = laki + perempuan
@@ -345,6 +391,26 @@ export async function exportSingleRT(data: Penduduk[], filename: string) {
 
   worksheet.getCell(`A${currentRow}`).value = `RT0${rtNumber}`
   worksheet.getCell(`B${currentRow}`).value = `Total: ${totalKK}`
+  currentRow++
+
+  worksheet.getCell(`A${currentRow}`).value = "KATEGORI USIA"
+  worksheet.getCell(`A${currentRow}`).font = { bold: true }
+  currentRow++
+
+  worksheet.getCell(`A${currentRow}`).value = "Balita (< 5 tahun)"
+  worksheet.getCell(`B${currentRow}`).value = ageCategories.Balita
+  currentRow++
+
+  worksheet.getCell(`A${currentRow}`).value = "Usia Sekolah (≤ 17 tahun)"
+  worksheet.getCell(`B${currentRow}`).value = ageCategories["Usia Sekolah"]
+  currentRow++
+
+  worksheet.getCell(`A${currentRow}`).value = "Produktif (≤ 60 tahun)"
+  worksheet.getCell(`B${currentRow}`).value = ageCategories.Produktif
+  currentRow++
+
+  worksheet.getCell(`A${currentRow}`).value = "Lansia (> 60 tahun)"
+  worksheet.getCell(`B${currentRow}`).value = ageCategories.Lansia
   currentRow++
 
   // Education section

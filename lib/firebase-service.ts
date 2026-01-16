@@ -163,3 +163,23 @@ export function getDemografiPekerjaan(pendudukList: Penduduk[]): DemografiPekerj
     .map(([pekerjaan, jumlah]) => ({ pekerjaan, jumlah }))
     .sort((a, b) => b.jumlah - a.jumlah)
 }
+
+// Refresh ages for all records based on birth dates
+export async function refreshAllAges(pendudukList: Penduduk[]): Promise<void> {
+  try {
+    // Check if any record needs age update
+    const today = new Date()
+
+    for (const penduduk of pendudukList) {
+      const currentAge = calculateAge(penduduk.tanggalLahir)
+
+      // Update if age has changed
+      if (currentAge !== penduduk.umur) {
+        console.log(`[v0] Updating age for ${penduduk.nama}: ${penduduk.umur} -> ${currentAge}`)
+        await updatePenduduk(penduduk.id || "", { umur: currentAge })
+      }
+    }
+  } catch (error) {
+    console.error("Error refreshing ages:", error)
+  }
+}

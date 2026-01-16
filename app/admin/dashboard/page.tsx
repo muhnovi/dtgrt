@@ -1,61 +1,44 @@
-"use client";
+"use client"
 
-import type React from "react";
+import type React from "react"
 
-import { useEffect, useState } from "react";
-import { motion } from "framer-motion";
-import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { auth } from "@/lib/firebase";
-import { useRouter } from "next/navigation";
-import {
-  LogOut,
-  Plus,
-  Trash2,
-  Users,
-  Download,
-  Edit,
-  Search,
-} from "lucide-react";
-import { useToast } from "@/hooks/use-toast";
-import { Footer } from "@/components/footer";
+import { useEffect, useState } from "react"
+import { motion } from "framer-motion"
+import { Button } from "@/components/ui/button"
+import { Card } from "@/components/ui/card"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { auth } from "@/lib/firebase"
+import { useRouter } from "next/navigation"
+import { LogOut, Plus, Trash2, Users, Download, Edit, Search, AlertCircle } from "lucide-react"
+import { useToast } from "@/hooks/use-toast"
+import { Footer } from "@/components/footer"
 import {
   addPenduduk,
   getAllPenduduk,
   deletePenduduk,
   updatePenduduk,
   calculateAge,
-} from "@/lib/firebase-service";
-import { exportAllRTWithStats, exportSingleRT } from "@/lib/excel-export";
-import type { Penduduk, JenisKelamin, Pendidikan, RT } from "@/lib/types";
+  refreshAllAges,
+} from "@/lib/firebase-service"
+import { exportAllRTWithStats, exportSingleRT } from "@/lib/excel-export"
+import type { Penduduk, JenisKelamin, Pendidikan, RT } from "@/lib/types"
+import { validateIdentityNumbers } from "@/lib/validation"
+import { normalizeDateFormat } from "@/lib/date-utils"
 
 export default function AdminDashboardPage() {
-  const router = useRouter();
-  const { toast } = useToast();
-  const [loading, setLoading] = useState(true);
-  const [pendudukList, setPendudukList] = useState<Penduduk[]>([]);
-  const [showForm, setShowForm] = useState(false);
-  const [editMode, setEditMode] = useState(false);
-  const [editId, setEditId] = useState<string | null>(null);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [rtFilter, setRtFilter] = useState<string | null>(null);
+  const router = useRouter()
+  const { toast } = useToast()
+  const [loading, setLoading] = useState(true)
+  const [pendudukList, setPendudukList] = useState<Penduduk[]>([])
+  const [showForm, setShowForm] = useState(false)
+  const [editMode, setEditMode] = useState(false)
+  const [editId, setEditId] = useState<string | null>(null)
+  const [searchQuery, setSearchQuery] = useState("")
+  const [rtFilter, setRtFilter] = useState<string | null>(null)
+  const [validationErrors, setValidationErrors] = useState<Record<string, string>>({})
 
   const [formData, setFormData] = useState({
     noKK: "",
@@ -67,75 +50,94 @@ export default function AdminDashboardPage() {
     pendidikan: "SD" as Pendidikan,
     pekerjaan: "",
     rt: "1" as RT,
-  });
+  })
 
   useEffect(() => {
-    checkAuth();
-    loadData();
-  }, []);
+    checkAuth()
+    loadData()
+  }, [])
+
+  useEffect(() => {
+    if (pendudukList.length > 0) {
+      refreshAllAges(pendudukList)
+    }
+  }, [pendudukList])
 
   const checkAuth = () => {
     const unsubscribe = auth.onAuthStateChanged((user) => {
       if (!user) {
-        router.push("/admin/login");
+        router.push("/admin/login")
       }
-    });
-    return unsubscribe;
-  };
+    })
+    return unsubscribe
+  }
 
   const loadData = async () => {
-    setLoading(true);
-    const data = await getAllPenduduk();
+    setLoading(true)
+    const data = await getAllPenduduk()
     const sortedData = data.sort((a, b) => {
-      const rtA = Number.parseInt(a.rt);
-      const rtB = Number.parseInt(b.rt);
-      return rtA - rtB;
-    });
-    setPendudukList(sortedData);
-    setLoading(false);
-  };
+      const rtA = Number.parseInt(a.rt)
+      const rtB = Number.parseInt(b.rt)
+      return rtA - rtB
+    })
+    await refreshAllAges(sortedData)
+    setPendudukList(sortedData)
+    setLoading(false)
+  }
 
   const handleLogout = async () => {
     try {
-      await auth.signOut();
+      await auth.signOut()
       toast({
         title: "Logout berhasil",
         description: "Anda telah keluar dari sistem",
-      });
-      router.push("/");
+      })
+      router.push("/")
     } catch (error) {
-      console.error("Logout error:", error);
+      console.error("Logout error:", error)
     }
-  };
+  }
 
   const handleTanggalLahirChange = (tanggalLahir: string) => {
-    const age = calculateAge(tanggalLahir);
+    const age = calculateAge(tanggalLahir)
     setFormData({
       ...formData,
       tanggalLahir,
       umur: age,
-    });
-  };
+    })
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+    e.preventDefault()
 
-    let result;
+    const validation = validateIdentityNumbers(formData.noKK, formData.nik)
+
+    if (!validation.valid) {
+      setValidationErrors(validation.errors)
+      toast({
+        title: "Data tidak valid",
+        description: "Harap perbaiki kesalahan pada form",
+        variant: "destructive",
+      })
+      return
+    }
+
+    setValidationErrors({})
+
+    let result
     if (editMode && editId) {
-      result = await updatePenduduk(editId, formData);
+      result = await updatePenduduk(editId, formData)
     } else {
-      result = await addPenduduk(formData);
+      result = await addPenduduk(formData)
     }
 
     if (result.success) {
       toast({
-        title: editMode
-          ? "Data berhasil diperbarui"
-          : "Data berhasil ditambahkan",
+        title: editMode ? "Data berhasil diperbarui" : "Data berhasil ditambahkan",
         description: editMode
           ? `Data penduduk ${formData.nama} telah diperbarui`
           : `Data penduduk ${formData.nama} telah disimpan`,
-      });
+      })
 
       setFormData({
         noKK: "",
@@ -147,19 +149,19 @@ export default function AdminDashboardPage() {
         pendidikan: "SD",
         pekerjaan: "",
         rt: "1",
-      });
-      setShowForm(false);
-      setEditMode(false);
-      setEditId(null);
-      loadData();
+      })
+      setShowForm(false)
+      setEditMode(false)
+      setEditId(null)
+      loadData()
     } else {
       toast({
         title: editMode ? "Gagal memperbarui data" : "Gagal menambahkan data",
         description: "Terjadi kesalahan saat menyimpan data",
         variant: "destructive",
-      });
+      })
     }
-  };
+  }
 
   const handleEdit = (penduduk: Penduduk) => {
     setFormData({
@@ -167,17 +169,18 @@ export default function AdminDashboardPage() {
       nama: penduduk.nama,
       nik: penduduk.nik,
       jenisKelamin: penduduk.jenisKelamin,
-      tanggalLahir: penduduk.tanggalLahir,
+      tanggalLahir: normalizeDateFormat(penduduk.tanggalLahir),
       umur: penduduk.umur,
       pendidikan: penduduk.pendidikan,
       pekerjaan: penduduk.pekerjaan,
       rt: penduduk.rt,
-    });
-    setEditMode(true);
-    setEditId(penduduk.id!);
-    setShowForm(true);
-    window.scrollTo({ top: 0, behavior: "smooth" });
-  };
+    })
+    setEditMode(true)
+    setEditId(penduduk.id!)
+    setShowForm(true)
+    setValidationErrors({})
+    window.scrollTo({ top: 0, behavior: "smooth" })
+  }
 
   const handleCancelEdit = () => {
     setFormData({
@@ -190,68 +193,63 @@ export default function AdminDashboardPage() {
       pendidikan: "SD",
       pekerjaan: "",
       rt: "1",
-    });
-    setShowForm(false);
-    setEditMode(false);
-    setEditId(null);
-  };
+    })
+    setShowForm(false)
+    setEditMode(false)
+    setEditId(null)
+    setValidationErrors({})
+  }
 
   const handleDelete = async (id: string, nama: string) => {
-    if (!confirm(`Hapus data ${nama}?`)) return;
+    if (!confirm(`Hapus data ${nama}?`)) return
 
-    const result = await deletePenduduk(id);
+    const result = await deletePenduduk(id)
 
     if (result.success) {
       toast({
         title: "Data berhasil dihapus",
         description: `Data ${nama} telah dihapus`,
-      });
-      loadData();
+      })
+      loadData()
     } else {
       toast({
         title: "Gagal menghapus data",
         description: "Terjadi kesalahan",
         variant: "destructive",
-      });
+      })
     }
-  };
+  }
 
   const handleExportAll = () => {
-    exportAllRTWithStats(
-      pendudukList,
-      `Data_Penduduk_RW7_Semua_RT_${new Date().toISOString().split("T")[0]}`
-    );
+    exportAllRTWithStats(pendudukList, `Data_Penduduk_RW7_Semua_RT_${new Date().toISOString().split("T")[0]}`)
     toast({
       title: "Download berhasil",
       description: "Data semua RT dengan statistik berhasil didownload",
-    });
-  };
+    })
+  }
 
   const handleExportByRT = (rt: string) => {
-    const filteredData = pendudukList.filter((p) => p.rt === rt);
-    exportSingleRT(
-      filteredData,
-      `Data_Penduduk_RT${rt}_${new Date().toISOString().split("T")[0]}`
-    );
+    const filteredData = pendudukList.filter((p) => p.rt === rt)
+    exportSingleRT(filteredData, `Data_Penduduk_RT${rt}_${new Date().toISOString().split("T")[0]}`)
     toast({
       title: "Download berhasil",
       description: `Data RT ${rt} berhasil didownload`,
-    });
-  };
+    })
+  }
 
   const filteredPendudukList = pendudukList.filter((penduduk) => {
-    const query = searchQuery.toLowerCase();
+    const query = searchQuery.toLowerCase()
     const matchesSearch =
       penduduk.nama.toLowerCase().includes(query) ||
       penduduk.nik.toLowerCase().includes(query) ||
       penduduk.noKK.toLowerCase().includes(query) ||
       penduduk.pekerjaan.toLowerCase().includes(query) ||
-      `rt ${penduduk.rt}`.includes(query);
+      `rt ${penduduk.rt}`.includes(query)
 
-    const matchesRT = rtFilter ? penduduk.rt === rtFilter : true;
+    const matchesRT = rtFilter ? penduduk.rt === rtFilter : true
 
-    return matchesSearch && matchesRT;
-  });
+    return matchesSearch && matchesRT
+  })
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
@@ -265,19 +263,11 @@ export default function AdminDashboardPage() {
           <div className="flex items-center gap-3">
             <Users className="w-6 h-6 sm:w-8 sm:h-8" />
             <div>
-              <h1 className="text-xl sm:text-2xl md:text-3xl font-bold">
-                Admin Dashboard
-              </h1>
-              <p className="text-primary-foreground/80 mt-1 text-sm sm:text-base">
-                Kelola Data Penduduk Desa
-              </p>
+              <h1 className="text-xl sm:text-2xl md:text-3xl font-bold">Admin Dashboard</h1>
+              <p className="text-primary-foreground/80 mt-1 text-sm sm:text-base">Kelola Data Penduduk Desa</p>
             </div>
           </div>
-          <Button
-            variant="secondary"
-            onClick={handleLogout}
-            className="gap-2 w-full sm:w-auto"
-          >
+          <Button variant="secondary" onClick={handleLogout} className="gap-2 w-full sm:w-auto">
             <LogOut className="w-4 h-4" />
             Logout
           </Button>
@@ -286,23 +276,14 @@ export default function AdminDashboardPage() {
 
       <div className="max-w-7xl mx-auto p-4 sm:p-6 space-y-4 sm:space-y-6 flex-1">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-          <h2 className="text-xl sm:text-2xl font-bold text-foreground">
-            Data Penduduk
-          </h2>
+          <h2 className="text-xl sm:text-2xl font-bold text-foreground">Data Penduduk</h2>
           <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
-            <Button
-              variant="outline"
-              onClick={handleExportAll}
-              className="gap-2 bg-transparent w-full sm:w-auto"
-            >
+            <Button variant="outline" onClick={handleExportAll} className="gap-2 bg-transparent w-full sm:w-auto">
               <Download className="w-4 h-4" />
               <span className="hidden sm:inline">Download Semua RT</span>
               <span className="sm:hidden">Download Semua</span>
             </Button>
-            <Button
-              onClick={() => setShowForm(!showForm)}
-              className="gap-2 w-full sm:w-auto"
-            >
+            <Button onClick={() => setShowForm(!showForm)} className="gap-2 w-full sm:w-auto">
               <Plus className="w-4 h-4" />
               {showForm ? "Tutup Form" : "Tambah Data"}
             </Button>
@@ -312,9 +293,7 @@ export default function AdminDashboardPage() {
         <Card className="p-4">
           <div className="flex flex-col gap-3">
             <div className="flex flex-col sm:flex-row flex-wrap gap-2 items-start sm:items-center">
-              <span className="text-sm font-medium text-muted-foreground">
-                Filter RT:
-              </span>
+              <span className="text-sm font-medium text-muted-foreground">Filter RT:</span>
               <div className="flex flex-wrap gap-2 w-full sm:w-auto">
                 <Button
                   variant={rtFilter === null ? "default" : "outline"}
@@ -339,9 +318,7 @@ export default function AdminDashboardPage() {
             </div>
             <div className="border-t pt-3">
               <div className="flex flex-col sm:flex-row flex-wrap gap-2 items-start sm:items-center">
-                <span className="text-sm font-medium text-muted-foreground">
-                  Download per RT:
-                </span>
+                <span className="text-sm font-medium text-muted-foreground">Download per RT:</span>
                 <div className="flex flex-wrap gap-2 w-full sm:w-auto">
                   {["1", "2", "3", "4"].map((rt) => (
                     <Button
@@ -374,8 +351,7 @@ export default function AdminDashboardPage() {
           </div>
           {(searchQuery || rtFilter) && (
             <p className="text-sm text-muted-foreground mt-2">
-              Ditemukan {filteredPendudukList.length} dari {pendudukList.length}{" "}
-              data
+              Ditemukan {filteredPendudukList.length} dari {pendudukList.length} data
               {rtFilter && ` di RT ${rtFilter}`}
             </p>
           )}
@@ -394,31 +370,53 @@ export default function AdminDashboardPage() {
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div>
                   <Label htmlFor="noKK">No. KK *</Label>
-                  <Input
-                    id="noKK"
-                    value={formData.noKK}
-                    onChange={(e) =>
-                      setFormData({ ...formData, noKK: e.target.value })
-                    }
-                    required
-                    placeholder="Contoh: 3201010101010001"
-                    className="text-base"
-                  />
+                  <div className="relative">
+                    <Input
+                      id="noKK"
+                      value={formData.noKK}
+                      onChange={(e) => {
+                        setFormData({ ...formData, noKK: e.target.value })
+                        if (validationErrors.noKK) {
+                          setValidationErrors({ ...validationErrors, noKK: "" })
+                        }
+                      }}
+                      required
+                      placeholder="Contoh: 3201010101010001"
+                      className={`text-base ${validationErrors.noKK ? "border-destructive" : ""}`}
+                    />
+                  </div>
+                  {validationErrors.noKK && (
+                    <div className="flex items-center gap-2 mt-2 text-destructive text-sm">
+                      <AlertCircle className="w-4 h-4" />
+                      <span>{validationErrors.noKK}</span>
+                    </div>
+                  )}
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <Label htmlFor="nik">NIK *</Label>
-                    <Input
-                      id="nik"
-                      value={formData.nik}
-                      onChange={(e) =>
-                        setFormData({ ...formData, nik: e.target.value })
-                      }
-                      required
-                      placeholder="Contoh: 3201010101010001"
-                      className="text-base"
-                    />
+                    <div className="relative">
+                      <Input
+                        id="nik"
+                        value={formData.nik}
+                        onChange={(e) => {
+                          setFormData({ ...formData, nik: e.target.value })
+                          if (validationErrors.nik) {
+                            setValidationErrors({ ...validationErrors, nik: "" })
+                          }
+                        }}
+                        required
+                        placeholder="Contoh: 3201010101010001"
+                        className={`text-base ${validationErrors.nik ? "border-destructive" : ""}`}
+                      />
+                    </div>
+                    {validationErrors.nik && (
+                      <div className="flex items-center gap-2 mt-2 text-destructive text-sm">
+                        <AlertCircle className="w-4 h-4" />
+                        <span>{validationErrors.nik}</span>
+                      </div>
+                    )}
                   </div>
 
                   <div>
@@ -426,9 +424,7 @@ export default function AdminDashboardPage() {
                     <Input
                       id="nama"
                       value={formData.nama}
-                      onChange={(e) =>
-                        setFormData({ ...formData, nama: e.target.value })
-                      }
+                      onChange={(e) => setFormData({ ...formData, nama: e.target.value })}
                       required
                       placeholder="Nama Lengkap"
                       className="text-base"
@@ -469,13 +465,7 @@ export default function AdminDashboardPage() {
 
                   <div>
                     <Label htmlFor="umur">Umur (Tahun)</Label>
-                    <Input
-                      id="umur"
-                      type="number"
-                      value={formData.umur}
-                      readOnly
-                      className="bg-muted"
-                    />
+                    <Input id="umur" type="number" value={formData.umur} readOnly className="bg-muted" />
                   </div>
 
                   <div>
@@ -493,12 +483,8 @@ export default function AdminDashboardPage() {
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="Tidak Sekolah">
-                          Tidak Sekolah
-                        </SelectItem>
-                        <SelectItem value="Belum Sekolah">
-                          Belum Sekolah
-                        </SelectItem>
+                        <SelectItem value="Tidak Sekolah">Tidak Sekolah</SelectItem>
+                        <SelectItem value="Belum Sekolah">Belum Sekolah</SelectItem>
                         <SelectItem value="TK">TK</SelectItem>
                         <SelectItem value="PAUD">PAUD</SelectItem>
                         <SelectItem value="SD">SD</SelectItem>
@@ -515,9 +501,7 @@ export default function AdminDashboardPage() {
                         <SelectItem value="BELUM TAMAT SMK">Belum Tamat SMK</SelectItem>
                         <SelectItem value="D3">D3</SelectItem>
                         <SelectItem value="D4">D4</SelectItem>
-                        <SelectItem value="TAMAT DIPLOMA">
-                          Tamat Diploma
-                        </SelectItem>
+                        <SelectItem value="TAMAT DIPLOMA">Tamat Diploma</SelectItem>
                         <SelectItem value="S1">S1</SelectItem>
                         <SelectItem value="TAMAT S1">Tamat S1</SelectItem>
                         <SelectItem value="S2">S2</SelectItem>
@@ -533,9 +517,7 @@ export default function AdminDashboardPage() {
                     <Input
                       id="pekerjaan"
                       value={formData.pekerjaan}
-                      onChange={(e) =>
-                        setFormData({ ...formData, pekerjaan: e.target.value })
-                      }
+                      onChange={(e) => setFormData({ ...formData, pekerjaan: e.target.value })}
                       required
                       placeholder="Pekerjaan"
                     />
@@ -545,9 +527,7 @@ export default function AdminDashboardPage() {
                     <Label htmlFor="rt">RT</Label>
                     <Select
                       value={formData.rt}
-                      onValueChange={(value) =>
-                        setFormData({ ...formData, rt: value as RT })
-                      }
+                      onValueChange={(value) => setFormData({ ...formData, rt: value as RT })}
                     >
                       <SelectTrigger>
                         <SelectValue />
@@ -598,13 +578,9 @@ export default function AdminDashboardPage() {
                   <TableHead className="whitespace-nowrap">No. KK</TableHead>
                   <TableHead className="whitespace-nowrap">NIK</TableHead>
                   <TableHead className="whitespace-nowrap">Nama</TableHead>
-                  <TableHead className="whitespace-nowrap">
-                    Jenis Kelamin
-                  </TableHead>
+                  <TableHead className="whitespace-nowrap">Jenis Kelamin</TableHead>
                   <TableHead className="whitespace-nowrap">Umur</TableHead>
-                  <TableHead className="whitespace-nowrap">
-                    Pendidikan
-                  </TableHead>
+                  <TableHead className="whitespace-nowrap">Pendidikan</TableHead>
                   <TableHead className="whitespace-nowrap">Pekerjaan</TableHead>
                   <TableHead className="whitespace-nowrap">RT</TableHead>
                   <TableHead className="whitespace-nowrap">Aksi</TableHead>
@@ -613,57 +589,30 @@ export default function AdminDashboardPage() {
               <TableBody>
                 {filteredPendudukList.length === 0 ? (
                   <TableRow>
-                    <TableCell
-                      colSpan={9}
-                      className="text-center text-muted-foreground py-8"
-                    >
-                      {searchQuery
-                        ? "Tidak ada data yang sesuai dengan pencarian"
-                        : "Belum ada data penduduk"}
+                    <TableCell colSpan={9} className="text-center text-muted-foreground py-8">
+                      {searchQuery ? "Tidak ada data yang sesuai dengan pencarian" : "Belum ada data penduduk"}
                     </TableCell>
                   </TableRow>
                 ) : (
                   filteredPendudukList.map((penduduk) => (
                     <TableRow key={penduduk.id}>
-                      <TableCell className="whitespace-nowrap">
-                        {penduduk.noKK}
-                      </TableCell>
-                      <TableCell className="whitespace-nowrap">
-                        {penduduk.nik}
-                      </TableCell>
-                      <TableCell className="whitespace-nowrap">
-                        {penduduk.nama}
-                      </TableCell>
-                      <TableCell className="whitespace-nowrap">
-                        {penduduk.jenisKelamin}
-                      </TableCell>
-                      <TableCell className="whitespace-nowrap">
-                        {penduduk.umur} tahun
-                      </TableCell>
-                      <TableCell className="whitespace-nowrap">
-                        {penduduk.pendidikan}
-                      </TableCell>
-                      <TableCell className="whitespace-nowrap">
-                        {penduduk.pekerjaan}
-                      </TableCell>
-                      <TableCell className="whitespace-nowrap">
-                        RT {penduduk.rt}
-                      </TableCell>
+                      <TableCell className="whitespace-nowrap">{penduduk.noKK}</TableCell>
+                      <TableCell className="whitespace-nowrap">{penduduk.nik}</TableCell>
+                      <TableCell className="whitespace-nowrap">{penduduk.nama}</TableCell>
+                      <TableCell className="whitespace-nowrap">{penduduk.jenisKelamin}</TableCell>
+                      <TableCell className="whitespace-nowrap">{penduduk.umur} tahun</TableCell>
+                      <TableCell className="whitespace-nowrap">{penduduk.pendidikan}</TableCell>
+                      <TableCell className="whitespace-nowrap">{penduduk.pekerjaan}</TableCell>
+                      <TableCell className="whitespace-nowrap">RT {penduduk.rt}</TableCell>
                       <TableCell>
                         <div className="flex gap-2">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleEdit(penduduk)}
-                          >
+                          <Button variant="outline" size="sm" onClick={() => handleEdit(penduduk)}>
                             <Edit className="w-4 h-4" />
                           </Button>
                           <Button
                             variant="destructive"
                             size="sm"
-                            onClick={() =>
-                              handleDelete(penduduk.id!, penduduk.nama)
-                            }
+                            onClick={() => handleDelete(penduduk.id!, penduduk.nama)}
                           >
                             <Trash2 className="w-4 h-4" />
                           </Button>
@@ -679,38 +628,21 @@ export default function AdminDashboardPage() {
           <div className="md:hidden space-y-4">
             {filteredPendudukList.length === 0 ? (
               <div className="text-center text-muted-foreground py-8">
-                {searchQuery
-                  ? "Tidak ada data yang sesuai dengan pencarian"
-                  : "Belum ada data penduduk"}
+                {searchQuery ? "Tidak ada data yang sesuai dengan pencarian" : "Belum ada data penduduk"}
               </div>
             ) : (
               filteredPendudukList.map((penduduk) => (
-                <div
-                  key={penduduk.id}
-                  className="bg-card border rounded-lg p-4 space-y-3"
-                >
+                <div key={penduduk.id} className="bg-card border rounded-lg p-4 space-y-3">
                   <div className="flex justify-between items-start">
                     <div>
                       <h3 className="font-semibold text-lg">{penduduk.nama}</h3>
-                      <p className="text-sm text-muted-foreground">
-                        RT {penduduk.rt}
-                      </p>
+                      <p className="text-sm text-muted-foreground">RT {penduduk.rt}</p>
                     </div>
                     <div className="flex gap-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleEdit(penduduk)}
-                      >
+                      <Button variant="outline" size="sm" onClick={() => handleEdit(penduduk)}>
                         <Edit className="w-4 h-4" />
                       </Button>
-                      <Button
-                        variant="destructive"
-                        size="sm"
-                        onClick={() =>
-                          handleDelete(penduduk.id!, penduduk.nama)
-                        }
-                      >
+                      <Button variant="destructive" size="sm" onClick={() => handleDelete(penduduk.id!, penduduk.nama)}>
                         <Trash2 className="w-4 h-4" />
                       </Button>
                     </div>
@@ -751,5 +683,5 @@ export default function AdminDashboardPage() {
 
       <Footer />
     </div>
-  );
+  )
 }
